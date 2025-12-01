@@ -8,5 +8,7 @@ dependencies = [
     "codetiming>=1.4.0",
     "ollama>=0.6.1",
     "pydantic>=2.12.4",
+    "pydantic-ai>=1.25.1",
+    "python-dotenv>=1.2.1",
     "requests>=2.32.5",
 ]

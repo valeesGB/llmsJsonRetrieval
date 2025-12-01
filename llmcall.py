@@ -1,11 +1,14 @@
-import ollama
+import ollama # atm ollama is the only tool that supports deepseek-ocr
 import re
 import os
 import  json
 from codetiming import Timer
+from pydantic_ai import Agent
+from pydantic_ai.models.openrouter import OpenRouterModel
 from pydantic import ValidationError
 from validation_structure import ResumeStructure
 from json_structures import json_structure, example_json
+
 
 def process_file(file_path: str, filename: str, output_folder: str, ocr_model: str, logic_model: str):
     with Timer(name="file_total", text="  > Total time for " + filename + ": {:.2f}s"):
@@ -27,13 +30,12 @@ def process_file(file_path: str, filename: str, output_folder: str, ocr_model: s
         valid_data = get_valid_json_from_model(raw_text, logic_model)
         
         if valid_data:
-            final_json_str = json.dumps(valid_data.model_dump(by_alias=True), indent=2)
-            save_json(final_json_str, filename, output_folder)
+            save_json(valid_data, filename, output_folder)
         else:
             print("  > JSON Validation Failed for {filename}.")
 
 def get_valid_json_from_model(raw_text: str, logic_model: str, max_retries: int = 3):
-    system_prompt = f"""            
+    prompt = f"""            
             
             You are a data extraction assistant. Below is raw text from a resume.
             Extract the data and format it EXACTLY as this JSON structure:
@@ -45,51 +47,43 @@ def get_valid_json_from_model(raw_text: str, logic_model: str, max_retries: int 
             3. For 'skills.skill_name', provide a single string containing the list of skills.
             
             RAW TEXT:
-            {raw_text}
-            """
-
-    user_message = f"""       
+            {raw_text} 
                 
             Example of valid JSON:
             {example_json}
                 
             If any field is missing in the raw text, use empty strings or empty arrays as appropriate.
             """
-
-    # History of the conversation
-    messages = [
-        {'role': 'system', 'content': system_prompt},
-        {'role': 'user', 'content': user_message}
-    ]            
     
+    #Calling with pydantic-ai provides automatic validation from the validation structure given
     #Call the model with retries
-    for attempt in range(max_retries):
-        try:
-            response = ollama.chat(
-                model=logic_model,
-                messages=messages,
-                options={'temperature': 0.1} # Low temp = more consistent JSON
-            )
-            json_content = response['message']['content']
-            
-            cleaned_json = clean_json(json_content)
-            validated_json = ResumeStructure.model_validate_json(cleaned_json)
-            return validated_json
-        except ValidationError as e:
-            print(f"  > Attempt {attempt + 1} Structure invalid: {e}")
-            error_msg = f"JSON validation error: {e}\n Correct the JSON structure and output it again."
-            # Append interaction to history so model "remembers" its mistake
-            messages.append({'role': 'assistant', 'content': json_content})
-            messages.append({'role': 'user', 'content': error_msg})
+    try:
+        model = OpenRouterModel(
+            model_name=logic_model,
+        )
         
-        except Exception as e:
-            print(f"    > Attempt {attempt+1}: General Error (likely invalid JSON syntax): {e}")
-            messages.append({'role': 'assistant', 'content': json_content})
-            messages.append({'role': 'user', 'content': "Invalid JSON syntax. Ensure keys are quoted and brackets match."})
+        agent = Agent(
+            model,
+            output_type=ResumeStructure,
+            system_prompt=prompt
+        )
+        
+        result_content = agent.run_sync()
+        
+        json_content = result_content.output
+        
+        json_string = json_content.model_dump_json()
+        
+        cleaned_json = clean_json(json_string)
+        return cleaned_json
+    except ValidationError as ve:
+        print(f"  > Validation Error: {ve}")
+
+    except Exception as e:
+        print(f"  > Logic Model Error: {e}")
             
     return None
             
-
 # --- JSON CLEAN ---
 def clean_json(text: str) -> str:
     # Clean Markdown Code Blocks (if model adds ```json ... ```)
