@@ -3,9 +3,9 @@ import requests
 import os
 
 # Name of the file containing the links
-file_path = 'resume_image_filenames.txt'
+file_path = 'resume_image_filenames_skipped_files.txt'
 # Folder to save images
-save_folder = 'resume_image'
+save_folder = 'skipped_resume_image1'
 
 # Create the folder if it doesn't exist
 if not os.path.exists(save_folder):

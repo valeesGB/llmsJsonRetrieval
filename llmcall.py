@@ -7,10 +7,10 @@ from pydantic import ValidationError
 from validation_structure import ResumeStructure
 from json_structures import json_structure, example_json
 
-def process_file(file_path: str, filename: str, output_folder: str, ocr_model: str, logic_model: str):
+def process_file(file_path: str, filename: str, output_folder: str, raw_text_folder: str,ocr_model: str, logic_model: str):
     with Timer(name="file_total", text="  > Total time for " + filename + ": {:.2f}s"):
 
-        # --- STEP 1: OCR ---
+        # --- STEP 1.1: OCR ---
         print("  > Reading image...")
         try:
             ocr_response = ollama.chat(
@@ -21,6 +21,20 @@ def process_file(file_path: str, filename: str, output_folder: str, ocr_model: s
         except Exception as e:
             print(f"  > OCR Failed: {e}")
             return
+        
+        # --- STEP 1.2: TXT ---
+        print("  > Saving Raw Text...")
+        
+        try:
+            base_name = os.path.splitext(filename)[0]
+            output_filename = f"{base_name}.txt"
+            output_path = os.path.join(raw_text_folder, output_filename)
+
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(raw_text)
+            print(f"  > Saved Raw Text to: {output_path}")
+        except Exception as file_error:
+            print(f"  > Error saving file: {file_error}")
         
         # --- STEP 2: JSON Formatting ---
         print("  > Extracting and Validating JSON...")
@@ -112,3 +126,4 @@ def save_json(json_content: str, filename: str, output_folder: str):
                     print(f"  > Saved JSON to: {output_path}")
                 except Exception as file_error:
                     print(f"  > Error saving file: {file_error}")
+        
